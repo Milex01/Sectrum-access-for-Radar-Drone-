@@ -1,0 +1,25 @@
+%Propagate wideband signal with three tones in a free space environment with constant speed of propagation.  
+%The center frequency is 3 GHz and the frequencies of the three tones are 750 kHz, 1 GHz, and 1.5 GHz, respectively. 
+%Plot the spectrum of the original signal and the propagated signal to observe the Doppler effect. The sampling frequency is 3 GHz.
+c = 1500;
+fc = 3000e3;
+fs = 3000e3;
+relfreqs = [-25000,0,25000];
+%Set up a stationary radar and moving target and compute the expected Doppler.
+rpos = [0;0;0];
+rvel = [0;0;0];
+tpos = [30/fs*c; 0;0];
+tvel = [45;0;0];
+dop = -tvel(1)./(c./(relfreqs + fc));
+%Create a signal and propagate the signal to the moving target.
+t = (0:199)/fs;
+x = sum(exp(1i*2*pi*t.'*relfreqs),2);
+channel = phased.WidebandFreeSpace(...
+    'PropagationSpeed',c,...
+    'OperatingFrequency',fc,...
+    'SampleRate',fs);
+y = channel(x,rpos,tpos,rvel,tvel);
+%Plot the spectra of the original signal and the Doppler-shifted signal.
+periodogram([x y],rectwin(size(x,1)),1024,fs,'centered')
+ylim([-150 0])
+legend('original','propagated');
