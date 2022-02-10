@@ -1,0 +1,160 @@
+rng(2020); % For repeatable results.
+scene = trackingScenario('UpdateRate',2.5);
+target = platform(scene);
+scene.Platforms{1}
+h = 1; % Unit in km
+waypoints = 1e3*[  1    1    0   -1    -1   0     1    1
+                   0   10   12   10   -10  -12  -10    0
+                   h    h    h    h     h   h     h    h]';
+course = [ 90   90  180   270  270    0   90   90]';% unit in degree
+timeOfArrival = 60*[  0   1.5  1.8  2.1  5.1  5.4  5.7  7.2]';
+targetTrajectory = waypointTrajectory('Waypoints', waypoints, 'TimeOfArrival', timeOfArrival);
+target.Trajectory = targetTrajectory;
+
+tp = theaterPlot('XLimits',[-12 12]*1e3,'Ylimits',[-12 12]*1e3,'ZLimits',[-1e4 1e4]);
+trajPlotter = trajectoryPlotter(tp,'DisplayName','Trajectory');
+plotTrajectory(trajPlotter,{waypoints})
+targetPlotter = platformPlotter(tp,'DisplayName','Target');
+
+while advance(scene) && ishghandle(tp.Parent)
+    targetPose = pose(target,'true');
+    plotPlatform(targetPlotter, targetPose.Position);
+end
+tower = platform(scene);
+tower.Dimensions = struct ('Length',5,'Width',5,'Height',30,'OriginOffset', [0 0 0]);
+tower.Trajectory.Position = [-1e4 0 15];
+towerPlotter = platformPlotter(tp,'DisplayName','Tower','Marker','o','MarkerFaceColor',[0 0 0]);
+plotPlatform(towerPlotter,tower.Trajectory.Position,tower.Dimensions,tower.Trajectory.Orientation);
+radar1 = fusionRadarSensor(1,'UpdateRate',2.5,...
+    'MountingLocation',[0 0 -15],'FieldOfView',[4;45],...
+    'MechanicalAzimuthLimits',[-60 60],'MechanicalElevationLimits',[0 0],...
+    'HasElevation',true,'FalseAlarmRate',1e-7)
+tower.Sensors = radar1;
+radar1Plotter = coveragePlotter(tp,'DisplayName','Radar1 Beam','Color','b');
+detPlotter = detectionPlotter(tp,'DisplayName','Detections',...
+    'Marker','o','MarkerFaceColor',[1 0 0]);
+restart(scene);
+while advance(scene) && ishghandle(tp.Parent)
+    
+    view(70,40); % Comment this to show the bird's eye view;
+    time = scene.SimulationTime;
+
+    % Obtain the target pose and plot it.
+    poseTarget = pose(target,'true');
+    plotPlatform(targetPlotter,poseTarget.Position);
+    
+    % Obtain the target pose expressed in the tower's coordinate frame.
+    poseInTower = targetPoses(tower);
+    
+    % Obtain the radar detections using the radar object.
+    [detections, numDets] = radar1(poseInTower,time);
+    
+    % Extract detection positions and transform them to the scenario frame.
+    detPos = zeros(numDets,3);
+    for i=1:numDets
+        detPos(i,:) = tower.Trajectory.Position + detections{i}.Measurement';
+    end
+
+    % Plot detections.
+    if ~isempty(detPos)
+        plotDetection(detPlotter,detPos);
+    end
+    
+    % Plot the radar beam and coverage area.
+    plotCoverage(radar1Plotter,coverageConfig(scene));
+    
+end
+radar2 = fusionRadarSensor(2,'Rotator','UpdateRate',2.5, ...
+    'MountingLocation',[0 0 -15], 'FieldOfView',[4; 45], ...
+    'HasElevation',true,'FalseAlarmRate',1e-7);
+tower.Sensors{2} = radar2;
+radar2Plotter = coveragePlotter(tp,'DisplayName','Radar 2 Beam', 'Color','g');
+restart(scene);
+while advance(scene) && ishghandle(tp.Parent)
+    
+    time = scene.SimulationTime;
+
+    % Obtain the target pose and plot it.
+    poseTarget = pose(target,'true');
+    plotPlatform(targetPlotter,poseTarget.Position);
+
+    % Plot the coverage of sensors.
+    configs = coverageConfig(scene);
+    plotCoverage(radar1Plotter,configs(1));
+    plotCoverage(radar2Plotter,configs(2));
+
+    % Generate the detections.
+    [towerDetections, numDets] = detect(tower,time);
+
+    % Extract detection positions and transform them to the scenario frame.
+    detPos = NaN(numDets,3);
+    for i=1:numDets
+        detPos(i,:) = tower.Trajectory.Position + towerDetections{i}.Measurement';    
+    end
+
+    % Plot detections.
+    if numDets
+        plotDetection(detPlotter,detPos);
+    end
+    
+end
+
+plane = platform(scene);
+planeTrajectory = waypointTrajectory('Waypoints',1e3*[-10 -10 -2.9; 12 12 -2.9],'TimeOfArrival',[0 80]);
+plane.Trajectory = planeTrajectory;
+planePlotter = platformPlotter(tp,'DisplayName','Plane','Marker','d','MarkerEdgeColor','k');
+radar3 = fusionRadarSensor(3,'No scanning','UpdateRate',2.5,'FieldOfView',[60,20], ...
+    'HasElevation',true,'FalseAlarmRate',1e-7);
+plane.Sensors = radar3;
+radar3Plotter = coveragePlotter(tp,'DisplayName','Radar 3 Beam', 'Color','y');
+
+release(radar1);
+radar1.HasINS = true;
+radar1.DetectionCoordinates = 'Scenario';
+release(radar2);
+radar2.HasINS = true;
+radar2.DetectionCoordinates = 'Scenario';
+radar3.HasINS = true;
+radar3.DetectionCoordinates = 'Scenario';
+
+% Hide the published figure. Show a pre-recorded animation instead.
+f = tp.Parent.Parent;
+if numel(dbstack) > 5
+    f.Visible = 'on';
+    f.Visible = 'off';
+end
+
+restart(scene);
+while advance(scene) && ishghandle(tp.Parent)
+     
+    % Obtain the target pose and plot it.
+    poseTarget = pose(target,'true');
+    plotPlatform(targetPlotter,poseTarget.Position);
+    
+    % Obtain the plane pose and plot it.
+    posePlane = pose(plane,'true');
+    plotPlatform(planePlotter,posePlane.Position);
+    
+    % Plot the coverage of sensors.
+    configs = coverageConfig(scene);
+    plotCoverage(radar1Plotter,configs(1));
+    plotCoverage(radar2Plotter,configs(2));
+    plotCoverage(radar3Plotter,configs(3));
+    
+    % Generate the detections.
+    scenarioDetections = detect(scene);
+    numDets = numel(scenarioDetections);
+    
+    % Extract detection positions in the scenario frame.
+    detPos = NaN(numDets,3);
+    for i=1:numDets
+        detPos(i,:) = scenarioDetections{i}.Measurement';    
+    end
+    
+    % Plot detections.
+    if numDets
+        plotDetection(detPlotter,detPos);
+    end
+    
+end
+
