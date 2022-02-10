@@ -1,0 +1,45 @@
+%This Script shows how to check system Dynamic based on state-space model and observations of a known parameter,
+%time-invariant. 
+%We use a process AR(1) model. We generate a random series of 200
+%observations from xt and we consider that the series starts at 1.5.
+clear all;
+close all;
+clc;
+T = 200;
+ARMdl = arima('AR',0.5,'Constant',0,'Variance',1);
+x0 = 0.5;
+rng(1); % For reproducibility
+x = simulate(ARMdl,T,'Y0',x0);
+%We consider the Gaussian with mean 0 and standard deviation 0.75.
+%Together, the latent process and observation equations compose a state-space model.
+%Use the random latent state process (x) and the observation equation to generate observations
+y = x + 0.75*randn(T,1);
+% We Specify four coefficient matrices.
+A = 0.5;
+B = 1;
+C = 1;
+D = 0.75;
+%Specify the state-space model using the coefficient matrices.
+Mdl = ssm(A,B,C,D)
+%Simulate one path each of states and observations. Specify that the paths span 200 periods.
+[simY,simX] = simulate(Mdl,200);
+%Plot the true state values with the simulated states. 
+%Also, plot the observed responses with the simulated responses.
+figure
+subplot(2,1,1)
+plot(1:T,x,'-k',1:T,simX,':r','LineWidth',2)
+title({'True State Values and Simulated States'})
+xlabel('Period')
+ylabel('State')
+legend({'True state values','Simulated state values'})
+subplot(2,1,2)
+plot(1:T,y,'-k',1:T,simY,':r','LineWidth',2)
+title({'Observed Responses and Simulated responses'})
+xlabel('Period')
+ylabel('Response')
+legend({'Observed responses','Simulated responses'})
+
+
+
+
+
